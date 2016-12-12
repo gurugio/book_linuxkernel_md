@@ -5,7 +5,7 @@ mdadm 툴 분석을 시작해보겠습니다.
 
 실제로 md장치를 생성하는 명령은 다음과 같습니다.
 ```
-$ mdadm --create /dev/md0 --level 1 --raid-disks /dev/loop0 /dev/loop1
+$ mdadm --create /dev/md0 --level 1 --raid-disks 2 /dev/loop0 /dev/loop1
 ```
 각 옵션은
 * create: 생성할 md장치의 이름
