@@ -24,9 +24,9 @@ $ mdadm --stop /dev/md0
 
 ## main 함수
 
-가장 먼저 main가 시작되겠지요. main에서 가장 먼저 처리해야할 것은 옵션입니다.
+가장 먼저 main가 시작되겠지요. main에서 가장 먼저 처리하는 것은 getopt_long함수를 이용한 옵션처리입니다.
 
-### getopt_long사용
+### 옵션처리
 
 옵션 처리를 알아보기 위해 다음처럼 간단한 예제를 만들어봤습니다.
 
@@ -71,7 +71,9 @@ level, raid-disks옵션은
 * short_options에서 'l:', 'n:'처럼 옵션뒤에 ':'를 붙이는게 짧은 옵션을 지정하는 문자열에서 추가 파라미터가 있다고 설정하는 것입니다.
 * 짧은 옵션은 각각 'l'과 'n'입니다.
 
-다음은 
+결국 short_options와 long_options가 동일한 옵션 처리를 하도록 만들었습니다.
+
+다음은 실행했을 때 동일하게 동작하는지를 본 것입니다.
 ```
 ~ $ ./a.out --create /dev/md0 --level 1 --raid-disks /dev/loop0 /dev/loop1
 C 67 0
@@ -86,10 +88,39 @@ l 108 -1
 n 110 -1
  1 -1
 ```
+짧은 옵션을 쓰면 getopt_long에서 option_index값을 반환시켜주지 못합니다. 하지만 옵션에 상관없이 opt값에는 동일한 값이 반환됩니다.
+
+getopt_long함수는 'C'옵션을 처리한 후에 '/dev/md0'을 읽습니다. 이 문자열은 옵션에 해당하지 않으므로 getopt_long함수는 1을 반환합니다.
+그리고 'l'옵션은 추가 파라미터가 있다고 했으므로 'l'옵션 다음에는 '1'문자열을 읽지만 옵션으로 처리하지 않습니다.
+그래서 'l'옵션 다음에는 1이 반환되지 않았습니다.
+'n'옵션도 추가 파라미터가 있어서 '/dev/loop0'문자열을 건너뛰지만 '/dev/loop1'을 만나기때문에 1을 반환합니다.
+
+그러면 이제 mdadm툴에서 어떻게 옵션을 처리하는지 보겠습니다.
 
 
+다음은 'create'옵션을 처리하는 코드입니다.
+```
+	while ((option_index = -1) ,
+	       (opt=getopt_long(argc, argv,
+				shortopt, long_options,
+				&option_index)) != -1) {
+...
+		case 'C': newmode = CREATE;
+			shortopt = short_bitmap_auto_options;
+			break;
+...
+		} else if (!mode && newmode) {
+			mode = newmode;
+			if (mode == MISC && devs_found) {
+				pr_err("No action given for %s in --misc mode\n",
+					devlist->devname);
+				cont_err("Action options must come before device names\n");
+				exit(2);
+			}
+```
+'create'옵션을 만나면 mode = newmode = CREATE 값이 됩니다.
 
-
+다음은 '/dev/md0' 옵션을 처리하는 코드입니다.
 ```
 		if (opt == 1) {
 			/* an undecorated option - must be a device name.
@@ -122,3 +153,5 @@ n 110 -1
 			continue;
 		}
 ```
+
+
