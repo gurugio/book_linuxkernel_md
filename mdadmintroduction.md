@@ -55,7 +55,7 @@ int main(int argc, char *argv[])
 	       (opt=getopt_long(argc, argv,
 				short_options, long_options,
 				&option_index)) != -1) {
-		printf("%c %d %d\n", (char)opt, opt, option_index);
+		printf("%c %d %d %s\n", (char)opt, opt, option_index, optarg);
 	}
 	return 0;
 }
@@ -71,32 +71,36 @@ level, raid-disks옵션은
 * short_options에서 'l:', 'n:'처럼 옵션뒤에 ':'를 붙이는게 짧은 옵션을 지정하는 문자열에서 추가 파라미터가 있다고 설정하는 것입니다.
 * 짧은 옵션은 각각 'l'과 'n'입니다.
 
-결국 short_options와 long_options가 동일한 옵션 처리를 하도록 만들었습니다.
+그리고 optarg라는게 있는데, 옵션외에 문자열을 읽는 것입니다. "/dev/md0"이나 "/dev/loop0"등을 가르키는 포인터입니다.
 
 다음은 실행했을 때 동일하게 동작하는지를 본 것입니다.
 ```
-~ $ ./a.out --create /dev/md0 --level 1 --raid-disks /dev/loop0 /dev/loop1
-C 67 0
- 1 -1
-l 108 1
-n 110 2
- 1 -1
-~ $ ./a.out -C /dev/md0 -l 1 -n /dev/loop0 /dev/loop1
-C 67 -1
- 1 -1
-l 108 -1
-n 110 -1
- 1 -1
+~ $ gcc a.c
+~ $ ./a.out --create /dev/md0 --level 1 --raid-disks 2 /dev/loop0 /dev/loop1
+C 67 0 (null)
+ 1 -1 /dev/md0
+l 108 1 1
+n 110 2 2
+ 1 -1 /dev/loop0
+ 1 -1 /dev/loop1
+~ $ ./a.out -C /dev/md0 -l 1 -n 2 /dev/loop0 /dev/loop1
+C 67 -1 (null)
+ 1 -1 /dev/md0
+l 108 -1 1
+n 110 -1 2
+ 1 -1 /dev/loop0
+ 1 -1 /dev/loop1
 ```
 짧은 옵션을 쓰면 getopt_long에서 option_index값을 반환시켜주지 못합니다. 하지만 옵션에 상관없이 opt값에는 동일한 값이 반환됩니다.
 
 getopt_long함수는 'C'옵션을 처리한 후에 '/dev/md0'을 읽습니다. 이 문자열은 옵션에 해당하지 않으므로 getopt_long함수는 1을 반환합니다.
-그리고 'l'옵션은 추가 파라미터가 있다고 했으므로 'l'옵션 다음에는 '1'문자열을 읽지만 옵션으로 처리하지 않습니다.
-그래서 'l'옵션 다음에는 1이 반환되지 않았습니다.
-'n'옵션도 추가 파라미터가 있어서 '/dev/loop0'문자열을 건너뛰지만 '/dev/loop1'을 만나기때문에 1을 반환합니다.
+그리고 'l'옵션은 추가 파라미터가 있다고 했으므로, '1'문자열을 읽어서 optarg로 반환합니다.
+'n'옵션도 마찬가지로 추가 파라미터가 있어서 2를 읽습니다.
+'/dev/loop0'옵션과 '/dev/loop1'옵션은 옵션 리스트에 없으므로 1을 반환합니다.
+
+중요한 것은 short_options와 long_options가 동일한 옵션 처리를 하도록 만들었다는 것입니다.
 
 그러면 이제 mdadm툴에서 어떻게 옵션을 처리하는지 보겠습니다.
-
 
 다음은 'create'옵션을 처리하는 코드입니다.
 ```
@@ -153,5 +157,57 @@ getopt_long함수는 'C'옵션을 처리한 후에 '/dev/md0'을 읽습니다. �
 			continue;
 		}
 ```
+옵션 리스트에 없는 문자열이므로 opt값은 1이 됩니다. 그러면 dv객체를 만들어서 optarg 값을 읽어서 '/dev/md0'문자열을 dv객체에 저장합니다.
 
+다음은 'level'옵션을 처리하는 코드입니다.
+```
+		case O(BUILD,'l'): /* set raid level*/
+			if (s.level != UnSet) {
+				pr_err("raid level may only be set once.  Second value is %s.\n", optarg);
+				exit(2);
+			}
+			s.level = map_name(pers, optarg);
+			if (s.level == UnSet) {
+				pr_err("invalid raid level: %s\n",
+					optarg);
+				exit(2);
+			}
+			if (s.level != 0 && s.level != LEVEL_LINEAR && s.level != 1 &&
+			    s.level != LEVEL_MULTIPATH && s.level != LEVEL_FAULTY &&
+			    s.level != 10 &&
+			    mode == BUILD) {
+				pr_err("Raid level %s not permitted with --build.\n",
+					optarg);
+				exit(2);
+			}
+			if (s.sparedisks > 0 && s.level < 1 && s.level >= -1) {
+				pr_err("raid level %s is incompatible with spare-devices setting.\n",
+					optarg);
+				exit(2);
+			}
+			ident.level = s.level;
+			continue;
+```
+'l'옵션은 추가 파라미터가 있다고 설정했으므로 optarg값이 "1"일 것입니다. 그래서 s.level = ident.level = 1이 됩니다.
+
+
+```
+		case O(GROW,'n'):
+		case O(CREATE,'n'):
+		case O(BUILD,'n'): /* number of raid disks */
+			if (s.raiddisks) {
+				pr_err("raid-devices set twice: %d and %s\n",
+					s.raiddisks, optarg);
+				exit(2);
+			}
+			s.raiddisks = parse_num(optarg);
+			if (s.raiddisks <= 0) {
+				pr_err("invalid number of raid devices: %s\n",
+					optarg);
+				exit(2);
+			}
+			ident.raid_disks = s.raiddisks;
+			continue;
+```
+'n'옵션도 추가 파라미터가 있으므로 optarg 포인터가 가르키는 '2'문자열을 읽어서 ident.raid_disks = s.raiddisks = 2로 저장합니다.
 
