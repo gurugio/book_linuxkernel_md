@@ -140,7 +140,30 @@ $ ls /dev/md0 -l
 brw-rw---- 1 root disk 9, 0 Dez 15 15:27 /dev/md0
 ```
 
+그 이유는 md 모듈에서 /dev/md0을 직접 생성하기 때문입니다.
+장치 파일 커널 이벤트가 발생해야만 생성됩니다.
+우리는 다음처럼 udevadm 프로그램을 통해 어떤 커널 이벤트가 발생했는지를 확인할 수 있습니다.
 
+```
+$ sudo udevadm moneitor
+monitor will print the received events for:
+UDEV - the event which udev sends out after rule processing
+KERNEL - the kernel uevent
 
-
-
+KERNEL[278035.153055] add      /devices/virtual/bdi/9:0 (bdi)
+KERNEL[278035.153114] add      /devices/virtual/block/md0 (block)
+UDEV  [278035.153615] add      /devices/virtual/bdi/9:0 (bdi)
+UDEV  [278035.155075] add      /devices/virtual/block/md0 (block)
+KERNEL[278729.798173] change   /devices/virtual/block/loop0 (block)
+UDEV  [278729.800013] change   /devices/virtual/block/loop0 (block)
+KERNEL[278729.844363] change   /devices/virtual/block/loop0 (block)
+KERNEL[278729.844918] change   /devices/virtual/block/loop1 (block)
+UDEV  [278729.846650] change   /devices/virtual/block/loop0 (block)
+UDEV  [278729.846698] change   /devices/virtual/block/loop1 (block)
+KERNEL[278729.847026] change   /devices/virtual/block/md0 (block)
+UDEV  [278729.848867] change   /devices/virtual/block/md0 (block)
+```
+우리가 mknod를 통해 major번호가 9이고 minor번호가 0인 파일을 만들면, 커널은 md 모듈의 probe함수를 호출합니다.
+md 모듈의 probe함수는 md_probe인데, 이 함수에서 struct gendisk 객체를 만들고, 객체가 생성될때 커널의 블럭 레이어에서 디스크가 생성되었다는 이벤트를 발생합니다.
+그래서 udevadm 프로그램으로 커널 이벤트를 확인할 수 있었던 것입니다.
+이 커널 이벤트가 발생하면 systemd나 udev데몬에서 최종적으로 장치 파일을 생성합니다.
