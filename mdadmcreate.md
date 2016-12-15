@@ -1,5 +1,6 @@
 # md 장치 생성하는 Create 함수
 
+## Create 함수의 인자
 main에서 프로그램 인자를 모두 읽은 후에 Create함수를 호출해서 md 장치를 생성합니다.
 다음은 Create함수가 호출되는 코드입니다.
 ```
@@ -51,7 +52,7 @@ $3 = {readonly = 0, runstop = 0, verbose = 0, brief = 0, force = 0, homehost = 0
  * level: --level 옵션에서 전달된 RAID level
 * c: 기타 옵션들
 
-
+## 슈퍼블럭(메타데이타)
 
 ```
 	struct mdinfo info, *infos;
@@ -242,6 +243,8 @@ $25 = {examine_super = 0x4467eb <examine_super1>, brief_examine_super = 0x447626
 /dev/loop0 장치를 열어서 이미 슈퍼블럭에 1.x 포맷의 메타데이터가 있는건 아닌지, 파티션이 있는 장치가 아닌지 등을 확인해서 RAID를 만들 수 있는지를 검사합니다.
 이상이 없다면 /dev/loop0를 닫고, 루프를 돌아 다음 장치를 검사합니다.
 다음 장치를 검사할 때는 이미 슈퍼블럭의 포맷이 결정되었으므로, 슈퍼블럭 포맷을 결정하는 코드는 건너뛰고 바로 장치를 검사합니다.
+
+## md 장치 파일 생성
 
 이제는 /dev/md0 장치 파일을 만들때가 됐습니다. create_mddev 함수로 장치 파일을 만듭니다.
 ```

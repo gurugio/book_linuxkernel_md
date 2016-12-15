@@ -1,5 +1,6 @@
 # md 장치 생성하는 Create 함수 (continue)
 
+## 타겟 장치 추가
 계속 Create함수를 보겠습니다.
 
 struct mdinfo 타입의 info 객체를 초기화한 후 새로 생성된 md0 장치의 슈퍼블럭 초기화에 사용합니다.
@@ -76,6 +77,8 @@ $ dmesg | tail
 [276242.320380] md: bind<loop0>
 [276316.677050] md: bind<loop1>
 ```
+
+## md 장치 생성
 
 마지막으로 다음과 같이 md모듈에 RUN_ARRAY 명령을 전달하면 /dev/md0 장치의 생성이 완료됩니다.
 ```
