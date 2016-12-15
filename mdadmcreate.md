@@ -268,6 +268,85 @@ $ ls /dev/.tmp*
 ls: cannot access /dev/.tmp*: No such file or directory
 ```
 
-이제 새로 생성할 장치의 fd를 가지게됐습니다.
+이제 create_mddev함수를 이용해서 새로 생성할 장치의 fd를 생성했습니다.
+fd를 생성했다는 것은 바로 md 커널 모듈을 사용하게 됐다는 것이므로 의미가 있는 것입니다.
+mknod로 장치 파일을 생성할 때 장치의 Major번호와 Minor번호를 지정합니다.
+Major번호는 9로 고정된 것입니다. 왜냐면 우리는 md 모듈이 장치를 만들도록 하고싶기 때문입니다. 
+다음처럼 /proc/devices 파일을 출력해보면 Major번호에 따라 어떤 커널 모듈과 연결되는지를 알 수 있습니다.
 
+```
+$ cat /proc/devices 
+...
+Block devices:
+  1 ramdisk
+259 blkext
+  7 loop
+  8 sd
+  9 md
+```
+Minor 번호는 장치의 순서대로 지정되는 것입니다. 첫번째 장치는 0번, 두번째 장치는 1번이 되는 식입니다.
 
+Create함수를 계속 보면 md_get_version함수가 나옵니다.
+```
+	vers = md_get_version(mdfd);
+```
+
+이 함수의 코드를 보면 다음과 같이 ioctl을 호출하는데 인자가 RAID_VERSION입니다.
+```
+int md_get_version(int fd)
+{
+	struct stat stb;
+	mdu_version_t vers;
+
+	if (fstat(fd, &stb)<0)
+		return -1;
+	if ((S_IFMT&stb.st_mode) != S_IFBLK)
+		return -1;
+
+	if (ioctl(fd, RAID_VERSION, &vers) == 0)
+		return  (vers.major*10000) + (vers.minor*100) + vers.patchlevel;
+	if (errno == EACCES)
+		return -1;
+	if (major(stb.st_rdev) == MD_MAJOR)
+		return (3600);
+	return -1;
+}
+```
+
+그리고 md 드라이버 파일을 보면 바로 RAID_VERSION 인자를 처리하는 코드가 있습니다. 
+다음은 linux 커널 코드중에서 drivers/md/md.c 파일에있는 md_ioctl함수의 코드 중 일부분입니다.
+```
+static int md_ioctl(struct block_device *bdev, fmode_t mode,
+			unsigned int cmd, unsigned long arg)
+{
+	int err = 0;
+	void __user *argp = (void __user *)arg;
+	struct mddev *mddev = NULL;
+	int ro;
+
+	if (!md_ioctl_valid(cmd))
+		return -ENOTTY;
+
+	switch (cmd) {
+	case RAID_VERSION:
+	case GET_ARRAY_INFO:
+	case GET_DISK_INFO:
+		break;
+	default:
+		if (!capable(CAP_SYS_ADMIN))
+			return -EACCES;
+	}
+
+	/*
+	 * Commands dealing with the RAID driver but not any
+	 * particular array:
+	 */
+	switch (cmd) {
+	case RAID_VERSION:
+		err = get_version(argp);
+		goto out;
+```
+md_ioctl은 어플에서 ioctl 시스템콜을 호출했을 때 호출되서 현재 md 모듈이 가고있는 정보를 반환해줍니다.
+시스템콜의 호출에 대한 내용은 다른 커널 책을 참고하세요.
+
+이렇게 장치 파일을 만들었다는 것은 그때부터 커널 모듈을 사용하기 시작하게 됐다는 의미입니다.
