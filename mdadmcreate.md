@@ -243,5 +243,31 @@ $25 = {examine_super = 0x4467eb <examine_super1>, brief_examine_super = 0x447626
 이상이 없다면 /dev/loop0를 닫고, 루프를 돌아 다음 장치를 검사합니다.
 다음 장치를 검사할 때는 이미 슈퍼블럭의 포맷이 결정되었으므로, 슈퍼블럭 포맷을 결정하는 코드는 건너뛰고 바로 장치를 검사합니다.
 
+이제는 /dev/md0 장치 파일을 만들때가 됐습니다. create_mddev 함수로 장치 파일을 만듭니다.
+```
+	mdfd = create_mddev(mddev, name, c->autof, LOCAL, chosen_name);
+```
+
+create_mddev함수는 /dev/md0 이라는 이름이 적합한지 등을 확인한 후에 다음과 같이 임시로 사용할 장치 파일을 만들었다가 unlink함수로 링크를 제거합니다.
+```
+		snprintf(devname, sizeof(devname), "/dev/.tmp.md.%d:%d:%d",
+			 (int)getpid(), major, minor);
+		if (mknod(devname, S_IFBLK|0600, makedev(major, minor)) == 0) {
+			fd = open(devname, flags);
+			unlink(devname);
+		}
+```
+unlink로 링크를 제거한다는 것은 파일 자체를 지운다는게 아니라, 파일시스템에 파일을 없애긴하지만 프로세스가 가지고있는 파일에 대한 정보는 유지한다는 것입니다.
+즉 open으로 얻은 fd 디스크립터는 유지하지만, /dev 디렉토리를 보면 그런 파일은 존재하지 않게됩니다.
+
+실제로 gdb를 써서 /dev/ 디렉토리에 다음과 같은 파일이 만들어졌다가 사라진것을 확인할 수 있습니다.
+```
+$ ls /dev/.tmp*
+/dev/.tmp.md.25065:9:0
+$ ls /dev/.tmp*
+ls: cannot access /dev/.tmp*: No such file or directory
+```
+
+이제 새로 생성할 장치의 fd를 가지게됐습니다.
 
 
