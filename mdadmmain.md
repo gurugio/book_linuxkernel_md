@@ -79,7 +79,27 @@ n 110 -1 2
 
 그러면 이제 mdadm툴에서 어떻게 옵션을 처리하는지 보겠습니다.
 
-다음은 'create'옵션을 처리하는 코드입니다.
+먼저 RAID로 묶을 장치를 만들기 위해 다음과 같이 loop0와 loop1을 생성합니다.
+```
+$ mkdir ./tmp
+$ dd if=/dev/zero of=./tmp/diska bs=1M count=10
+10+0 records in
+10+0 records out
+10485760 bytes (10 MB) copied, 0,00434252 s, 2,4 GB/s
+$ dd if=/dev/zero of=./tmp/diskb bs=1M count=10
+10+0 records in
+10+0 records out
+10485760 bytes (10 MB) copied, 0,00425071 s, 2,5 GB/s
+$ sudo losetup /dev/loop0 tmp/diska
+$ sudo losetup /dev/loop1 tmp/diskb
+```
+
+그리고 다음과 같이 mdadm 프로그램으로 /dev/md0 장치를 만든다고 생각해보겠습니다.
+```
+$ sudo mdadm --create /dev/md0 --level 1 --raid-disks 2 /dev/loop0 /dev/loop1
+```
+
+main함수에서 '--create'옵션을 처리하는 코드를 보겠습니다.
 ```
 	while ((option_index = -1) ,
 	       (opt=getopt_long(argc, argv,
