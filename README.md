@@ -1,5 +1,7 @@
 # book_linuxkernel_md
 
+https://gurugio.gitbooks.io/book_linuxkernel_md/content/
+
 커널의 간단한 블럭 장치 드라이버와 블럭레이어에 대한 분석을 해봤으니 이번에는 실제로 사용되는 블럭 장치 중에서 md 드라이버를 분석해보겠습니다.
 
 md(software raid)드라이버를 이해하기 위해서는 디바이스 드라이버 자체와 md 장치를 생성하고 관리하는 mdadm 툴을 알아야합니다.
