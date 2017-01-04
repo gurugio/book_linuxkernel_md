@@ -14,45 +14,47 @@ access("/etc/ld.so.preload", R_OK)      = -1 ENOENT (No such file or directory)
 ......
 ```
 
-그런데 너무 많은 내용이 출력되므로 다음과 같이 간단하게 md 디스크를 만드는 mknod, open 시스템콜과 ioctl만 골라서 써놓겠습니다.
+그런데 너무 많은 내용이 출력되므로 다음과 같이 간단하게 md 디스크를 만드는 mknod, open 시스템콜과 ioctl만 골라서 써놓겠습니다.  
 이렇게 mknod, open, ioctl 시스템콜을 따로 보는 이유는 나중에 커널 소스를 분석할 때 md 모듈에서 이런 시스템콜을 어떻게 처리하는지를 파악하기 위해서입니다.
+
+md 모듈의 소스는 방대하므로 모든 코드를 다 분석할 수 없습니다. 따라서 mdadm 툴에서 어떤 시스템콜을 호출하는지 알면 md 모듈에서 먼저 파악해야할 코드가 무엇인지 알 수 있으므로 md 모듈을 분석하는데 시작점이 될 수 있습니다.
 
 ## ioctl 명령
 
-mdadm 소스중에 md_u.h 파일을보면 ioctl 시스템콜을 통해 md 모듈에 전달할 명령들이 정의되어 있습니다.
+mdadm 소스중에 md\_u.h 파일을보면 ioctl 시스템콜을 통해 md 모듈에 전달할 명령들이 정의되어 있습니다.
 
 다음은 명령중의 일부입니다.
 
 ```
-#define RAID_VERSION		_IOR (MD_MAJOR, 0x10, mdu_version_t)
-#define GET_ARRAY_INFO		_IOR (MD_MAJOR, 0x11, mdu_array_info_t)
-#define GET_DISK_INFO		_IOR (MD_MAJOR, 0x12, mdu_disk_info_t)
-#define PRINT_RAID_DEBUG	_IO (MD_MAJOR, 0x13)
-#define RAID_AUTORUN		_IO (MD_MAJOR, 0x14)
-#define GET_BITMAP_FILE		_IOR (MD_MAJOR, 0x15, mdu_bitmap_file_t)
+#define RAID_VERSION        _IOR (MD_MAJOR, 0x10, mdu_version_t)
+#define GET_ARRAY_INFO        _IOR (MD_MAJOR, 0x11, mdu_array_info_t)
+#define GET_DISK_INFO        _IOR (MD_MAJOR, 0x12, mdu_disk_info_t)
+#define PRINT_RAID_DEBUG    _IO (MD_MAJOR, 0x13)
+#define RAID_AUTORUN        _IO (MD_MAJOR, 0x14)
+#define GET_BITMAP_FILE        _IOR (MD_MAJOR, 0x15, mdu_bitmap_file_t)
 
 /* configuration */
-#define CLEAR_ARRAY		_IO (MD_MAJOR, 0x20)
-#define ADD_NEW_DISK		_IOW (MD_MAJOR, 0x21, mdu_disk_info_t)
-#define HOT_REMOVE_DISK		_IO (MD_MAJOR, 0x22)
-#define SET_ARRAY_INFO		_IOW (MD_MAJOR, 0x23, mdu_array_info_t)
-#define SET_DISK_INFO		_IO (MD_MAJOR, 0x24)
-#define WRITE_RAID_INFO		_IO (MD_MAJOR, 0x25)
-#define UNPROTECT_ARRAY		_IO (MD_MAJOR, 0x26)
-#define PROTECT_ARRAY		_IO (MD_MAJOR, 0x27)
-#define HOT_ADD_DISK		_IO (MD_MAJOR, 0x28)
-#define SET_DISK_FAULTY		_IO (MD_MAJOR, 0x29)
-#define SET_BITMAP_FILE		_IOW (MD_MAJOR, 0x2b, int)
+#define CLEAR_ARRAY        _IO (MD_MAJOR, 0x20)
+#define ADD_NEW_DISK        _IOW (MD_MAJOR, 0x21, mdu_disk_info_t)
+#define HOT_REMOVE_DISK        _IO (MD_MAJOR, 0x22)
+#define SET_ARRAY_INFO        _IOW (MD_MAJOR, 0x23, mdu_array_info_t)
+#define SET_DISK_INFO        _IO (MD_MAJOR, 0x24)
+#define WRITE_RAID_INFO        _IO (MD_MAJOR, 0x25)
+#define UNPROTECT_ARRAY        _IO (MD_MAJOR, 0x26)
+#define PROTECT_ARRAY        _IO (MD_MAJOR, 0x27)
+#define HOT_ADD_DISK        _IO (MD_MAJOR, 0x28)
+#define SET_DISK_FAULTY        _IO (MD_MAJOR, 0x29)
+#define SET_BITMAP_FILE        _IOW (MD_MAJOR, 0x2b, int)
 
 /* usage */
-#define RUN_ARRAY		_IOW (MD_MAJOR, 0x30, mdu_param_t)
-#define START_ARRAY		_IO (MD_MAJOR, 0x31)
-#define STOP_ARRAY		_IO (MD_MAJOR, 0x32)
-#define STOP_ARRAY_RO		_IO (MD_MAJOR, 0x33)
-#define RESTART_ARRAY_RW	_IO (MD_MAJOR, 0x34)
+#define RUN_ARRAY        _IOW (MD_MAJOR, 0x30, mdu_param_t)
+#define START_ARRAY        _IO (MD_MAJOR, 0x31)
+#define STOP_ARRAY        _IO (MD_MAJOR, 0x32)
+#define STOP_ARRAY_RO        _IO (MD_MAJOR, 0x33)
+#define RESTART_ARRAY_RW    _IO (MD_MAJOR, 0x34)
 ```
 
-RAID_VERSION이라는 상수는 ``_IOR(MD_MARJO, 0x10, ..)`` 이라고 정의되었습니다. 여기에서 MD_MAJOR는 0x9이고, 그 다음 값이 0x10이므로 결국 최종 값은 0x?????910이 될 것입니다. strace로 출력한 결과중에 다음과 같이 ioctl에 0x800c0910 값을 전달하는 코드가 있으므로 RAID_VERSION의 값이 0x800c0910 인 것을 알 수 있습니다.
+RAID\_VERSION이라는 상수는 `_IOR(MD_MARJO, 0x10, ..)` 이라고 정의되었습니다. 여기에서 MD\_MAJOR는 0x9이고, 그 다음 값이 0x10이므로 결국 최종 값은 0x?????910이 될 것입니다. strace로 출력한 결과중에 다음과 같이 ioctl에 0x800c0910 값을 전달하는 코드가 있으므로 RAID\_VERSION의 값이 0x800c0910 인 것을 알 수 있습니다.
 
 ```
 ioctl(3, 0x800c0910, 0x7ffcecff5a60)    = 0
@@ -60,7 +62,7 @@ ioctl(3, 0x800c0910, 0x7ffcecff5a60)    = 0
 
 ## md 디스크 생성
 
-다음은 ``mdadm --create`` 명령으로 md 디스크를 생성할 때 호출되는 시스템콜입니다.
+다음은 `mdadm --create` 명령으로 md 디스크를 생성할 때 호출되는 시스템콜입니다.
 
 ```
 mknod("/dev/.tmp.md.1419:9:100", S_IFBLK|0600, makedev(9, 100)) = 0
@@ -87,7 +89,7 @@ ioctl(3, 0x400c0930, 0x7ffcecff5dc0)    = 0 ------------------------------------
 
 ## md 디스크 해지
 
-다음은 ``mdadm --stop`` 명령으로 md 디스크를 제거할 때 호출되는 시스템콜입니다.
+다음은 `mdadm --stop` 명령으로 md 디스크를 제거할 때 호출되는 시스템콜입니다.
 
 ```
 open("/dev/md100", O_RDWR)              = 3
@@ -119,3 +121,6 @@ write(2, "mdadm: stopped /dev/md100\n", 26mdadm: stopped /dev/md100
 ) = 26
 close(3)                                = 0
 ```
+
+
+
