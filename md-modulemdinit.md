@@ -1,3 +1,21 @@
+# md_init()
+
+md_init()은 md 모듈의 시작 지점입니다. md 모듈을 커널에 정적으로 포함되도록 빌드했으므로, 커널이 부팅되면서 md_init() 함수가 호출됩니다.
+
+md_init()은 다음 3가지를 실행합니다. 
+* workqueue생성
+ * md, md_misc라는 이름의 workqueue를 생성합니다.
+* md_probe() 등록
+ * md 장치의 주번호는 9입니다.
+ * 주번호가 9인 장치파일이 생성될때마다 md_probe()함수가 호출됩니다.
+* /proc/mdstat 파일 생성
+ * 모든 md 디스크의 상태를 출력하는 /proc/mdstat 파일을 생성합니다.
+
+
+
+
+
+
 
 ```
 diff --git a/drivers/md/md.c b/drivers/md/md.c
