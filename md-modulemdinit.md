@@ -42,61 +42,61 @@ void md_flush_request(struct mddev *mddev, struct bio *bio)
 EXPORT_SYMBOL(md_flush_request);
 ```
 
-INIT\_WORK 매크로를 통해 mddev-&gt;flush\_work에 submit_flushes 함수를 연결하고 workqueue에 등록합니다. 그러면 잠시 시간이 흐른 후에 submit\__flushes 함수가 호출됩니다.
+INIT\_WORK 매크로를 통해 mddev-&gt;flush\_work에 submit\_flushes 함수를 연결하고 workqueue에 등록합니다. 그러면 잠시 시간이 흐른 후에 submit\_\_flushes 함수가 호출됩니다.
 
 submit\_flushes 함수의 역할은 나중에 분석하겠습니다.
 
 ## md\_probe
 
-blk_register_region함수는 커널에 블럭 장치를 등록하는 함수입니다. 이 블럭 장치는 주번호가 9 (=MD_MAJOR)이고 부번호는 0~511 을 가질 수 있습니다. 그리고 이런 장치 번호에 해당하는 장치가 생성되면 md_probe 함수를 호출합니다.
+blk\_register\_region함수는 커널에 블럭 장치를 등록하는 함수입니다. 이 블럭 장치는 주번호가 9 \(=MD\_MAJOR\)이고 부번호는 0~511 을 가질 수 있습니다. 그리고 이런 장치 번호에 해당하는 장치가 생성되면 md\_probe 함수를 호출합니다.
 
 ```
-	blk_register_region(MKDEV(MD_MAJOR, 0), 512, THIS_MODULE,
-			    md_probe, NULL, NULL);
+blk_register_region(MKDEV(MD_MAJOR, 0), 512, THIS_MODULE,
+                md_probe, NULL, NULL);
 ```
 
-blk_register_region 함수는 kobj_map 함수를 호출해서 등록된 장치를 위한 struct probe 객체를 생성하고 커널에 등록됩니다.
+blk\_register\_region 함수는 kobj\_map 함수를 호출해서 등록된 장치를 위한 struct probe 객체를 생성하고 커널에 등록됩니다.  
 다음 코드가 바로 struct probe 객체를 생성하고 커널에 등록하는 코드입니다.
 
 ```
 int kobj_map(struct kobj_map *domain, dev_t dev, unsigned long range,
-	     struct module *module, kobj_probe_t *probe,
-	     int (*lock)(dev_t, void *), void *data)
+         struct module *module, kobj_probe_t *probe,
+         int (*lock)(dev_t, void *), void *data)
 {
-	unsigned n = MAJOR(dev + range - 1) - MAJOR(dev) + 1;
-	unsigned index = MAJOR(dev);
-	unsigned i;
-	struct probe *p;
+    unsigned n = MAJOR(dev + range - 1) - MAJOR(dev) + 1;
+    unsigned index = MAJOR(dev);
+    unsigned i;
+    struct probe *p;
 
-	if (n > 255)
-		n = 255;
+    if (n > 255)
+        n = 255;
 
-	p = kmalloc_array(n, sizeof(struct probe), GFP_KERNEL);
-	if (p == NULL)
-		return -ENOMEM;
+    p = kmalloc_array(n, sizeof(struct probe), GFP_KERNEL);
+    if (p == NULL)
+        return -ENOMEM;
 
-	for (i = 0; i < n; i++, p++) {
-		p->owner = module;
-		p->get = probe;
-		p->lock = lock;
-		p->dev = dev;
-		p->range = range;
-		p->data = data;
-	}
-	mutex_lock(domain->lock);
-	for (i = 0, p -= n; i < n; i++, p++, index++) {
-		struct probe **s = &domain->probes[index % 255];
-		while (*s && (*s)->range < range)
-			s = &(*s)->next;
-		p->next = *s;
-		*s = p;
-	}
+    for (i = 0; i < n; i++, p++) {
+        p->owner = module;
+        p->get = probe;
+        p->lock = lock;
+        p->dev = dev;
+        p->range = range;
+        p->data = data;
+    }
+    mutex_lock(domain->lock);
+    for (i = 0, p -= n; i < n; i++, p++, index++) {
+        struct probe **s = &domain->probes[index % 255];
+        while (*s && (*s)->range < range)
+            s = &(*s)->next;
+        p->next = *s;
+        *s = p;
+    }
 ...
 ```
 
-kobj_map은 등록된 장치에 필요한 갯수만큼 probe 객체를 생성하고 domain->probes 리스트에 추가합니다.
+kobj\_map은 등록된 장치에 필요한 갯수만큼 probe 객체를 생성하고 domain-&gt;probes 리스트에 추가합니다.
 
-md_probe 함수가 정확히 언제 호출되는지 알아보기 위해 다음과 같이 dump_stack 함수를 md_probe 함수안에 추가하고 커널을 부팅해보겠습니다.
+md\_probe 함수가 정확히 언제 호출되는지 알아보기 위해 다음과 같이 dump\_stack 함수를 md\_probe 함수안에 추가하고 커널을 부팅해보겠습니다.
 
 ```
 diff --git a/drivers/md/md.c b/drivers/md/md.c
@@ -117,7 +117,7 @@ index 61aacab..4ec2ace 100644
  }
 ```
 
-커널의 부팅 과정에서 md 장치를 만들지 않기 때문에 커널의 부팅 메세지에 md_probe가 없습니다. 그러므로 다음과 같이 md0 장치를 만들어보면 그때야 md_probe가 호출되는 것을 알 수 있습니다.
+커널의 부팅 과정에서 md 장치를 만들지 않기 때문에 커널의 부팅 메세지에 md\_probe가 없습니다. 그러므로 다음과 같이 md0 장치를 만들어보면 그때야 md\_probe가 호출되는 것을 알 수 있습니다.
 
 ```
 / # mdadm --create /dev/md0 -l 1 -n 2 /dev/vda /dev/vdb
@@ -178,51 +178,54 @@ v/md0 started.
 / # [   52.210333] md: md0: resync done.
 ```
 
-콜스택을 보면 장치 파일을 open했을 때 kobj_lookup 함수에서 md_probe를 호출합니다.
-우리가 이미 분석했듯이 mdadm 툴에서 md 장치를 만들 때 mknod 시스템콜을 써서 
+콜스택을 보면 장치 파일을 open했을 때 kobj\_lookup 함수에서 md\_probe를 호출합니다.  
+우리가 이미 분석했듯이 mdadm 툴에서 md 장치를 만들 때 mknod 시스템콜을 써서 장치 파일을 만들고 open시스템콜을 호출합니다. 바로 그때 md\_probe가 호출됩니다.
+
+다음은 kobj\_lookup 코드에서 md\_probe를 호출하는 코드입니다.
 
 ```
 struct kobject *kobj_lookup(struct kobj_map *domain, dev_t dev, int *index)
 {
-	struct kobject *kobj;
-	struct probe *p;
-	unsigned long best = ~0UL;
+    struct kobject *kobj;
+    struct probe *p;
+    unsigned long best = ~0UL;
 
 retry:
-	mutex_lock(domain->lock);
-	for (p = domain->probes[MAJOR(dev) % 255]; p; p = p->next) {
-		struct kobject *(*probe)(dev_t, int *, void *);
-		struct module *owner;
-		void *data;
+    mutex_lock(domain->lock);
+    for (p = domain->probes[MAJOR(dev) % 255]; p; p = p->next) {
+        struct kobject *(*probe)(dev_t, int *, void *);
+        struct module *owner;
+        void *data;
 
-		if (p->dev > dev || p->dev + p->range - 1 < dev)
-			continue;
-		if (p->range - 1 >= best)
-			break;
-		if (!try_module_get(p->owner))
-			continue;
-		owner = p->owner;
-		data = p->data;
-		probe = p->get;
-		best = p->range - 1;
-		*index = dev - p->dev;
-		if (p->lock && p->lock(dev, data) < 0) {
-			module_put(owner);
-			continue;
-		}
-		mutex_unlock(domain->lock);
-		kobj = probe(dev, index, data);
+        if (p->dev > dev || p->dev + p->range - 1 < dev)
+            continue;
+        if (p->range - 1 >= best)
+            break;
+        if (!try_module_get(p->owner))
+            continue;
+        owner = p->owner;
+        data = p->data;
+        probe = p->get;
+        best = p->range - 1;
+        *index = dev - p->dev;
+        if (p->lock && p->lock(dev, data) < 0) {
+            module_put(owner);
+            continue;
+        }
+        mutex_unlock(domain->lock);
+        kobj = probe(dev, index, data);
 ```
-kobj_lookup함수를 보면 커널에 등록된 장치들의 장치번호를 확인해서 현재 생성되는 장치의 장치 번호에 해당하는 probe 객체를 찾아서 p->get에 저장된 함수포인터를 호출합니다.
+
+kobj\_lookup함수를 보면 커널에 등록된 장치들의 장치번호를 확인해서 현재 생성되는 장치의 장치 번호에 해당하는 probe 객체를 찾아서 p-&gt;get에 저장된 함수포인터를 호출합니다.
 
 ## /proc/mdstat
 
-다음과 같이 proc_create 함수로 /proc/mdstat 파일을 만듭니다.
+다음과 같이 proc\_create 함수로 /proc/mdstat 파일을 만듭니다.
 
 ```
-	proc_create("mdstat", S_IRUGO, NULL, &md_seq_fops);
+proc_create("mdstat", S_IRUGO, NULL, &md_seq_fops);
 ```
 
-mdstat파일을 읽을 때 호출되는 함수가 md_seq_fops에 정의되어있는데, 커널에 등록된 모든 md 장치들이 all_mddevs 리스트에 연결되어있으므로, 이 리스트에서 각 장치들을 찾아서 정보를 확인하게 됩니다.
+mdstat파일을 읽을 때 호출되는 함수가 md\_seq\_fops에 정의되어있는데, 커널에 등록된 모든 md 장치들이 all\_mddevs 리스트에 연결되어있으므로, 이 리스트에서 각 장치들을 찾아서 정보를 확인하게 됩니다.  
 코드만 봐도 이해할 수 있는 내용이므로 여기에서 더이상 자세히 설명하지는 않겠습니다.
 
