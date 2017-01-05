@@ -1,21 +1,61 @@
-# md_init()
+# md\_init
 
-md_init()은 md 모듈의 시작 지점입니다. md 모듈을 커널에 정적으로 포함되도록 빌드했으므로, 커널이 부팅되면서 md_init() 함수가 호출됩니다.
+md\_init은 md 모듈의 시작 지점입니다. md 모듈을 커널에 정적으로 포함되도록 빌드했으므로, 커널이 부팅되면서 md\_init 함수가 호출됩니다.
 
-md_init()은 다음 3가지를 실행합니다. 
+md\_init은 다음 3가지를 실행합니다.
+
 * workqueue생성
- * md, md_misc라는 이름의 workqueue를 생성합니다.
-* md_probe() 등록
- * md 장치의 주번호는 9입니다.
- * 주번호가 9인 장치파일이 생성될때마다 md_probe()함수가 호출됩니다.
+  * md, md\_misc라는 이름의 workqueue를 생성합니다.
+* md\_probe 등록
+  * md 장치의 주번호는 9입니다.
+  * 주번호가 9인 장치파일이 생성될때마다 md\_probe함수가 호출됩니다.
 * /proc/mdstat 파일 생성
- * 모든 md 디스크의 상태를 출력하는 /proc/mdstat 파일을 생성합니다.
+  * 모든 md 디스크의 상태를 출력하는 /proc/mdstat 파일을 생성합니다.
 
+## md workqueue
 
+다음과 같이 "md"라는 이름의 workqueue를 생성합니다.
 
+```
+static struct workqueue_struct *md_wq;
+......
+    md_wq = alloc_workqueue("md", WQ_MEM_RECLAIM, 0);
+    if (!md_wq)
+        goto err_wq;
+```
 
+예를 들어 md\_flush\_request라는 함수는 다음과 같이 md\_wq에 mddev-&gt;flush\_work를 추가합니다.
 
+```
+void md_flush_request(struct mddev *mddev, struct bio *bio)
+{
+    spin_lock_irq(&mddev->lock);
+    wait_event_lock_irq(mddev->sb_wait,
+                !mddev->flush_bio,
+                mddev->lock);
+    mddev->flush_bio = bio;
+    spin_unlock_irq(&mddev->lock);
 
+    INIT_WORK(&mddev->flush_work, submit_flushes);
+    queue_work(md_wq, &mddev->flush_work);
+}
+EXPORT_SYMBOL(md_flush_request);
+```
+
+INIT\_WORK 매크로를 통해 mddev-&gt;flush\_work에 submit_flushes 함수를 연결하고 workqueue에 등록합니다. 그러면 잠시 시간이 흐른 후에 submit\__flushes 함수가 호출됩니다.
+
+submit\_flushes 함수의 역할은 나중에 분석하겠습니다.
+
+## md\_probe
+
+blk_register_region함수는 커널에 블럭 장치를 등록하는 함수입니다. 이 블럭 장치는 주번호가 9 (=MD_MAJOR)이고 부번호는 0~511 을 가질 수 있습니다. 그리고 이런 장치 번호에 해당하는 장치가 생성되면 md_probe 함수를 호출합니다.
+
+```
+	blk_register_region(MKDEV(MD_MAJOR, 0), 512, THIS_MODULE,
+			    md_probe, NULL, NULL);
+```
+
+md_probe 함수가 정확히 언제 호출되는지 알아보기 위해 다음과 같이 dump_stack 함수를 md_probe 함수안에 추가하고 커널을 부팅해보겠습니다.
 
 ```
 diff --git a/drivers/md/md.c b/drivers/md/md.c
@@ -23,7 +63,7 @@ index 61aacab..4ec2ace 100644
 --- a/drivers/md/md.c
 +++ b/drivers/md/md.c
 @@ -5072,7 +5072,12 @@ static int md_alloc(dev_t dev, char *name)
- 
+
  static struct kobject *md_probe(dev_t dev, int *part, void *data)
  {
 +
@@ -36,7 +76,7 @@ index 61aacab..4ec2ace 100644
  }
 ```
 
-
+커널의 부팅 과정에서 md 장치를 만들지 않기 때문에 커널의 부팅 메세지에 md_probe가 없습니다. 그러므로 다음과 같이 md0 장치를 만들어보면 그때야 md_probe가 호출되는 것을 알 수 있습니다.
 
 ```
 / # mdadm --create /dev/md0 -l 1 -n 2 /dev/vda /dev/vdb
@@ -96,3 +136,10 @@ v/md0 started.
 [   48.227734] md: using 128k window, over a total of 102272k.
 / # [   52.210333] md: md0: resync done.
 ```
+
+
+
+## /proc/mdstat
+
+
+
