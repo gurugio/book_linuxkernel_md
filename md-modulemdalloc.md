@@ -118,5 +118,16 @@ Breakpoint 1, md_alloc (dev=9437184, name=0x0 <irq_stack_union>) at drivers/md/m
 
 이제 md_alloc 함수를 gdb로 한줄씩 실행하면서 분석해볼 수 있습니다.
 
+## create queue
 
+
+
+```
+	mddev->queue = blk_alloc_queue(GFP_KERNEL);
+	if (!mddev->queue)
+		goto abort;
+	mddev->queue->queuedata = mddev;
+
+	blk_queue_make_request(mddev->queue, md_make_request);
+```
 
