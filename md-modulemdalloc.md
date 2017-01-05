@@ -136,7 +136,7 @@ mddev_find는 all_mddev 리스트에서 dev에 해당하는 장치번호를 가�
 
 ## create queue
 
-다음 코드와 같이 
+다음 코드와 같이 blk_alloc_queue함수를 이용해서 queue를 만듭니다.
 
 ```
 	mddev->queue = blk_alloc_queue(GFP_KERNEL);
@@ -147,3 +147,118 @@ mddev_find는 all_mddev 리스트에서 dev에 해당하는 장치번호를 가�
 	blk_queue_make_request(mddev->queue, md_make_request);
 ```
 
+제가 만든 다른 강좌 https://github.com/gurugio/book_linuxkernel_blockdrv 를 보시면 아시겠지만 blk_alloc_queue로 만든 queue는 bio단위로 IO를 처리합니다.
+그리고 블럭레이어로부터 bio를 받아서 처리하는 함수가 md_make_request 함수가 됩니다.
+md_make_request함수는 추후에 분석하겠습니다.
+
+## create gendisk
+
+다음 코드에서 gendisk 객체 disk를 만듭니다.
+```
+	disk = alloc_disk(1 << shift);
+	if (!disk) {
+		blk_cleanup_queue(mddev->queue);
+		mddev->queue = NULL;
+		goto abort;
+	}
+	disk->major = MAJOR(mddev->unit);
+	disk->first_minor = unit << shift;
+	if (name)
+		strcpy(disk->disk_name, name);
+	else if (partitioned)
+		sprintf(disk->disk_name, "md_d%d", unit);
+	else
+		sprintf(disk->disk_name, "md%d", unit);
+	disk->fops = &md_fops;
+	disk->private_data = mddev;
+	disk->queue = mddev->queue;
+	blk_queue_flush(mddev->queue, REQ_FLUSH | REQ_FUA);
+	/* Allow extended partitions.  This makes the
+	 * 'mdp' device redundant, but we can't really
+	 * remove it now.
+	 */
+	disk->flags |= GENHD_FL_EXT_DEVT;
+	mddev->gendisk = disk;
+	/* As soon as we call add_disk(), another thread could get
+	 * through to md_open, so make sure it doesn't get too far
+	 */
+	mutex_lock(&mddev->open_mutex);
+	add_disk(disk);
+```
+
+우리가 눈여겨봐야할 것은 md_fops 구조체입니다. 그 외에는 일반적인 블럭 장치들이 gendisk를 만드는 것과 동일합니다.
+
+```
+static const struct block_device_operations md_fops =
+{
+	.owner		= THIS_MODULE,
+	.open		= md_open,
+	.release	= md_release,
+	.ioctl		= md_ioctl,
+#ifdef CONFIG_COMPAT
+	.compat_ioctl	= md_compat_ioctl,
+#endif
+	.getgeo		= md_getgeo,
+	.media_changed  = md_media_changed,
+	.revalidate_disk= md_revalidate,
+};
+```
+
+md_open이나 md_release는 mddev 객체의 참조 카운터를 증가시키고 감소시키는 일을 합니다.
+
+우리가 주의해서봐야할 함수는 md_ioctl입니다. mdadm 툴에서 ioctl 시스템콜을 통해 md 모듈에 명령을 전달하면 바로 md_ioctl 함수에서 명령을 받아서 처리하기 때문입니다.
+다음 장에서 md_ioctl을 따로 분석하겠습니다.
+
+
+## create md and bitmap in sysfs
+
+gendisk를 만드는 순간에 /sys/block/md0 디렉토리가 생성됩니다. 다음은 /sys/block/md0/md 디렉토리를 만드는 코드입니다.
+
+```
+	error = kobject_init_and_add(&mddev->kobj, &md_ktype,
+				     &disk_to_dev(disk)->kobj, "%s", "md");
+```
+그리고 다음은 /sys/block/md0/md/bitmap 디렉토리를 만듭니다.
+```
+	if (mddev->kobj.sd &&
+	    sysfs_create_group(&mddev->kobj, &md_bitmap_group))
+```
+
+그럼 다음과 같이 많은 파일들이 생성됩니다.
+```
+/ # ls /sys/block/md0/
+alignment_offset   ext_range          queue              slaves
+bdi                holders            range              stat
+capability         inflight           removable          subsystem
+dev                md                 ro                 trace
+discard_alignment  power              size               uevent
+/ # ls /sys/block/md0/md
+array_size           level                safe_mode_delay
+array_state          max_read_errors      suspend_hi
+bitmap               metadata_version     suspend_lo
+bitmap_set_bits      mismatch_cnt         sync_action
+chunk_size           new_dev              sync_completed
+component_size       raid_disks           sync_force_parallel
+degraded             rd0                  sync_max
+dev-vda              rd1                  sync_min
+dev-vdb              reshape_direction    sync_speed
+last_sync_action     reshape_position     sync_speed_max
+layout               resync_start         sync_speed_min
+/ # ls /sys/block/md0/md/bitmap
+backlog           chunksize         max_backlog_used  space
+can_clear         location          metadata          time_base
+```
+각 파일들에 대한 내용은 md_ktype 객체나 md_bitmap_group 객체를 참고하면 됩니다.
+세부적인 내용은 다음 강좌에서 그때그때 필요할때마다 설명하겠습니다.
+지금은 md0 장치에 대한 다양한 정보들이 /sys/block/md0 디렉토리에 모여있다는 것만 알고넘어가겠습니다.
+
+## KOBJ_ADD uevent
+
+지금까지 아무 이상없이 md0 디스크가 생성되었으면 KOBJ_ADD uevent를 발생시킵니다.
+
+```
+		kobject_uevent(&mddev->kobj, KOBJ_ADD);
+```
+
+그럼 udev 데몬이 /dev/md0이라는 장치 파일을 생성합니다.
+udev 데몬과 uevent에 대해서는 따로 설명하지 않겠습니다. 다른 자료를 참고하시기 바랍니다.
