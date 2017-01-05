@@ -118,9 +118,25 @@ Breakpoint 1, md_alloc (dev=9437184, name=0x0 <irq_stack_union>) at drivers/md/m
 
 이제 md_alloc 함수를 gdb로 한줄씩 실행하면서 분석해볼 수 있습니다.
 
+## create mddev object
+
+다음과 같이 mddev_find 함수에서 mddev 객체를 생성합니다.
+
+```
+	struct mddev *mddev = mddev_find(dev);
+```
+
+mddev_find는 all_mddev 리스트에서 dev에 해당하는 장치번호를 가진 mddev 객체가 이미 있는지를 검사합니다.
+만약 그런 장치번호를 가진 객체가 없다면 다음과 같은 일이 새로운 mddev객체를 생성하고 all_mddev 리스트에 추가합니다.
+* kzalloc으로 struct mddev 객체 할당
+* mddev->unit에 장치번호 저장
+* mddev->md_minor에 부번호 저장
+* mddev의 대부분의 필드를 0이나 기본값으로 초기화
+* 리스트 노드 mddev->all_mddevs를 all_mddev 리스트 헤드에 추가
+
 ## create queue
 
-
+다음 코드와 같이 
 
 ```
 	mddev->queue = blk_alloc_queue(GFP_KERNEL);
