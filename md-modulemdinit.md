@@ -55,6 +55,47 @@ blk_register_region함수는 커널에 블럭 장치를 등록하는 함수입�
 			    md_probe, NULL, NULL);
 ```
 
+blk_register_region 함수는 kobj_map 함수를 호출해서 등록된 장치를 위한 struct probe 객체를 생성하고 커널에 등록됩니다.
+다음 코드가 바로 struct probe 객체를 생성하고 커널에 등록하는 코드입니다.
+
+```
+int kobj_map(struct kobj_map *domain, dev_t dev, unsigned long range,
+	     struct module *module, kobj_probe_t *probe,
+	     int (*lock)(dev_t, void *), void *data)
+{
+	unsigned n = MAJOR(dev + range - 1) - MAJOR(dev) + 1;
+	unsigned index = MAJOR(dev);
+	unsigned i;
+	struct probe *p;
+
+	if (n > 255)
+		n = 255;
+
+	p = kmalloc_array(n, sizeof(struct probe), GFP_KERNEL);
+	if (p == NULL)
+		return -ENOMEM;
+
+	for (i = 0; i < n; i++, p++) {
+		p->owner = module;
+		p->get = probe;
+		p->lock = lock;
+		p->dev = dev;
+		p->range = range;
+		p->data = data;
+	}
+	mutex_lock(domain->lock);
+	for (i = 0, p -= n; i < n; i++, p++, index++) {
+		struct probe **s = &domain->probes[index % 255];
+		while (*s && (*s)->range < range)
+			s = &(*s)->next;
+		p->next = *s;
+		*s = p;
+	}
+...
+```
+
+kobj_map은 등록된 장치에 필요한 갯수만큼 probe 객체를 생성하고 domain->probes 리스트에 추가합니다.
+
 md_probe 함수가 정확히 언제 호출되는지 알아보기 위해 다음과 같이 dump_stack 함수를 md_probe 함수안에 추가하고 커널을 부팅해보겠습니다.
 
 ```
@@ -137,9 +178,50 @@ v/md0 started.
 / # [   52.210333] md: md0: resync done.
 ```
 
+콜스택을 보면 장치 파일을 open했을 때 kobj_lookup 함수에서 md_probe를 호출합니다.
 
+```
+struct kobject *kobj_lookup(struct kobj_map *domain, dev_t dev, int *index)
+{
+	struct kobject *kobj;
+	struct probe *p;
+	unsigned long best = ~0UL;
+
+retry:
+	mutex_lock(domain->lock);
+	for (p = domain->probes[MAJOR(dev) % 255]; p; p = p->next) {
+		struct kobject *(*probe)(dev_t, int *, void *);
+		struct module *owner;
+		void *data;
+
+		if (p->dev > dev || p->dev + p->range - 1 < dev)
+			continue;
+		if (p->range - 1 >= best)
+			break;
+		if (!try_module_get(p->owner))
+			continue;
+		owner = p->owner;
+		data = p->data;
+		probe = p->get;
+		best = p->range - 1;
+		*index = dev - p->dev;
+		if (p->lock && p->lock(dev, data) < 0) {
+			module_put(owner);
+			continue;
+		}
+		mutex_unlock(domain->lock);
+		kobj = probe(dev, index, data);
+```
+kobj_lookup함수를 보면 커널에 등록된 장치들의 장치번호를 확인해서 현재 생성되는 장치의 장치 번호에 해당하는 probe 객체를 찾아서 p->get에 저장된 함수포인터를 호출합니다.
 
 ## /proc/mdstat
 
+다음과 같이 proc_create 함수로 /proc/mdstat 파일을 만듭니다.
 
+```
+	proc_create("mdstat", S_IRUGO, NULL, &md_seq_fops);
+```
+
+mdstat파일을 읽을 때 호출되는 함수가 md_seq_fops에 정의되어있는데, 커널에 등록된 모든 md 장치들이 all_mddevs 리스트에 연결되어있으므로, 이 리스트에서 각 장치들을 찾아서 정보를 확인하게 됩니다.
+코드만 봐도 이해할 수 있는 내용이므로 여기에서 더이상 자세히 설명하지는 않겠습니다.
 
