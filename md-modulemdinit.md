@@ -179,6 +179,7 @@ v/md0 started.
 ```
 
 콜스택을 보면 장치 파일을 open했을 때 kobj_lookup 함수에서 md_probe를 호출합니다.
+우리가 이미 분석했듯이 mdadm 툴에서 md 장치를 만들 때 mknod 시스템콜을 써서 
 
 ```
 struct kobject *kobj_lookup(struct kobj_map *domain, dev_t dev, int *index)
