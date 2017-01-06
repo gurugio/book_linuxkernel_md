@@ -92,4 +92,38 @@ $38 = {next = 0xffff880006832818, prev = 0xffff880006832818}
 	}
 ```
 
+```
+Breakpoint 4, md_ioctl (bdev=0xffff880006174000, mode=<optimised out>, cmd=1078462755, 
+    arg=<optimised out>) at drivers/md/md.c:6828
+6828			err = set_array_info(mddev, &info);
+(gdb) s
+set_array_info (info=<optimised out>, mddev=<optimised out>) at drivers/md/md.c:6348
+6348		if (info->raid_disks == 0) {
+(gdb) n
+6350			if (info->major_version < 0 ||
+(gdb) n
+6352			    super_types[info->major_version].name == NULL) {
+(gdb) n
+6351			    info->major_version >= ARRAY_SIZE(super_types) ||
+(gdb) n
+6359			mddev->major_version = info->major_version;
+(gdb) n
+6360			mddev->minor_version = info->minor_version;
+(gdb) n
+6361			mddev->patch_version = info->patch_version;
+(gdb) n
+6362			mddev->persistent = !info->not_persistent;
+(gdb) n
+6366			mddev->ctime         = get_seconds();
+(gdb) n
+md_ioctl (bdev=0xffff880006174000, mode=<optimised out>, cmd=1078462755, arg=<optimised out>)
+    at drivers/md/md.c:6802
+6802				err = -EFAULT;
+(gdb) p/x cmd
+$42 = 0x40480923
+(gdb) p mddev->major_version
+$43 = 1
+(gdb) p mddev->minor_version
+$44 = 2
+```
 
