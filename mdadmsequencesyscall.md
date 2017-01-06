@@ -87,7 +87,7 @@ write(2, "mdadm: array /dev/md100 started."..., 33mdadm: array /dev/md100 starte
 ioctl(3, 0x400c0930, 0x7ffcecff5dc0)    = 0 --------------------------------------RUN_ARRAY
 ```
 
-## md 디스크 해지
+## md 디스크 제거
 
 다음은 `mdadm --stop` 명령으로 md 디스크를 제거할 때 호출되는 시스템콜입니다.
 
