@@ -6,6 +6,8 @@ md\_alloc은 md 장치를 만드는데 핵심적인 일을 하므로 코드를 �
 
 ## debugging md_alloc with gdb
 
+To debug kernel code with gdb, CONFIG_DEBUG_INFO kernel option must be selected before compile the kernel.
+
 다음 명령으로 커널을 부팅합니다. ``-s``옵션이 있어야 gdb로 커널을 디버깅할 수 있습니다. ``-s`` 옵션은 1234번 포트를 열어서 gdb와 qemu가 연결되도록 합니다.
 
 ```
