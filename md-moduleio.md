@@ -53,7 +53,38 @@ But WRITE operation must be done for all raid-devices.
 
 Let's go ahead.
 
+```
+	r1_bio->master_bio = bio;
+	r1_bio->sectors = bio_sectors(bio);
+	r1_bio->state = 0;
+	r1_bio->mddev = mddev;
+	r1_bio->sector = bio->bi_iter.bi_sector;
+```
+
+r1_bio has the information about the original bio.
+
+Next code is separated for READ and WRITE.
+
+
 ### READ operation
+
+
+First it find a disk that READ operation will be handled
+
+```
+		rdisk = read_balance(conf, r1_bio, &max_sectors);
+
+		if (rdisk < 0) {
+			/* couldn't find anywhere to read from */
+			raid_end_bio_io(r1_bio);
+			return;
+		}
+		mirror = conf->mirrors + rdisk;
+```
+
+conf->mirrors has all raid-devices, so mirror will have pointer to rdev object.
+
+
 
 
 
