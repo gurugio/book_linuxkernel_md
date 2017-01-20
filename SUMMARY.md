@@ -14,4 +14,5 @@
 * [md-module\/ioctl-SET\_ARRAY\_INFO](md-moduleioctl-setarrayinfo.md)
 * [md-module\/ioctl-ADD\_NEW\_DISK](md-moduleioctl-addnewdisk.md)
 * [md-module\/ioctl-RUN\_ARRAY](md-moduleioctl-runarray.md)
-
+* [md-module\/ioctl-STOP\_ARRAY](md-moduleioctl-stoprray.md)
+* [md-module\/io](md-moduleio.md)
