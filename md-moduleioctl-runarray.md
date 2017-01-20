@@ -45,6 +45,7 @@ do\_md\_run에서 첫번째로 호출하는 함수는 md\_run입니다. md\_run�
       * call md_check_recovery(): check MD_RECOVERY_NEEDED bit and do recovery or resync
     * this thread is not started yet, will start after md_run() is finished
       * see ``do_md_run(): md_wakeup_thread(mddev->thread)``
+    * We will look into what raid1d() does in later chapter
   * mddev->private = conf
 * mddev->in_sync = 1
 * mddev->pers = pers;
@@ -96,16 +97,4 @@ static int __init raid_init(void)
 	return register_md_personality(&raid1_personality);
 }
 ```
-
-### md100_raid1 thread (raid1() in raid1.c)
-
-IMPORTANT!! CALL generic_make_request!!!
-
-
-* md_check_recover()
-
-
-
-
-
 
