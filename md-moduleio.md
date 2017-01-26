@@ -84,10 +84,53 @@ First it find a disk that READ operation will be handled
 
 conf->mirrors has all raid-devices, so mirror will have pointer to rdev object.
 
+```
+		read_bio = bio_clone_mddev(bio, GFP_NOIO, mddev);
+```
 
+New bio is created from bio-pool of mddev.
 
+```
+		read_bio->bi_iter.bi_sector = r1_bio->sector +
+			mirror->rdev->data_offset;
+		read_bio->bi_bdev = mirror->rdev->bdev;
+		read_bio->bi_end_io = raid1_end_read_request;
+		read_bio->bi_rw = READ | do_sync;
+		read_bio->bi_private = r1_bio;
+```
+After bio is completed, raid1_end_read_request will be called.
 
+```
+			generic_make_request(read_bio);
+```
 
+Now bio is sent to request-queue of vda or vdb.
+I checked what function process the bio with gdb.
+
+```
+(gdb) p read_bio->bi_bdev->bd_disk->queue->make_request_fn 
+$31 = (make_request_fn *) 0xffffffff813a2130 <blk_sq_make_request>
+```
+
+blk_sq_make_request will get bio and send it into virtio driver because QEMU generates block disk with virtio block driver.
+You can check detail with blk_mq_init_allocated_queue and virtblk_probe functions.
+
+#### raid1_end_read_request
+
+Let's check what raid1 module will do to complete bio processing.
+
+```
+	int uptodate = !bio->bi_error;
+...
+	if (uptodate)
+		set_bit(R1BIO_Uptodate, &r1_bio->state);
+...
+	if (uptodate) {
+		raid_end_bio_io(r1_bio);
+```
+
+Above code shows that raid1_end_read_request calls raid_end_bio_io if there is no error from vda/vdb device.
+Then raid_end_bio_io free r1_bio object.
 
 ### WRITE operation
 
